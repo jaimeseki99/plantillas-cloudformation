@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Plantilla para crear una instancia EC2 con Ubuntu 24.04 y acceso SSH.
+
+Resources:
+  MySecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Grupo de seguridad para permitir acceso SSH.'
+      SecurityGroupIngress:
+        - IpProtocol: 'tcp'
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: "tcp"
+          FromPort: '20'
+          ToPort: '20'
+          CidrIp: '0.0.0.0/0'  # Permite el acceso desde cualquier dirección IP. Considera cambiarlo a una IP más segura.
+
+  MyEC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: 't2.micro'  # Puedes cambiar el tipo de instancia según tus necesidades
+      ImageId: 'ami-0e2c8caa4b6378d8c'  # Reemplaza con la ID de la AMI de Ubuntu 24.04
+      KeyName: 'vockey'  # Reemplaza con el nombre de tu clave SSH
+      SecurityGroups:
+        - Ref: 'MySecurityGroup'
+      Tags:
+        - Key: 'Name'
+          Value: 'MiInstanciaUbuntu2404'
+
+Outputs:
+  InstanceId:
+    Description: 'ID de la instancia EC2'
+    Value: !Ref MyEC2Instance
+  PublicIP:
+    Description: 'Dirección IP pública de la instancia EC2'
+    Value: !GetAtt MyEC2Instance.PublicIp
