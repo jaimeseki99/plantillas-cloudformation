@@ -1,0 +1,174 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Plantilla para crear una VPC con una subred pública y otra privada dentro de una AZ, con IGW y NAT GW"
+
+Parameters:
+  ImageId:
+    Type: String
+    Default: "ami-0c02fb55956c7d316"
+    Description: "ID de la imagen AMI para la instancia EC2"
+    AllowedValues:
+      - "ami-0c02fb55956c7d316"  # Amazon Linux 2
+      - "ami-0d8f6eb4f641ef691"  # Ubuntu Server 20.04 LTS
+      - "ami-0a91cd140a1fc148a"  # Red Hat Enterprise Linux 8
+    ConstraintDescription: "Debe ser una de las AMIs permitidas: Amazon Linux 2, Ubuntu Server 20.04 LTS o Red Hat Enterprise Linux 8."
+
+Resources:
+  VPC: 
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: "14.0.0.0/16"
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: "Name"
+          Value: "VPC-PilaNumberFive"
+  
+  InternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: "InternetGW-PilaNumberFive"
+  
+  InternetGatewayAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties: 
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+  
+  PublicSubnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: "us-east-1a"
+      CidrBlock: "14.0.1.0/24"
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: "Name"
+          Value: "SubnetPublica-PilaNumberFive"
+
+  PublicRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: "TablaPublica-PilaNumberFive"
+  
+  InternetGatewayRoute:
+    Type: "AWS::EC2::Route"
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+  
+  PublicSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties: 
+      GroupDescription: "Grupo de seguridad para permitir la entrada por SSH desde cualquier IP"
+      GroupName: "GS-Public-PilaNumberFive"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+  
+  PublicEC2Instance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      ImageId: !Ref ImageId
+      KeyName: "vockey"
+      InstanceType: "t2.micro"
+      SecurityGroupIds: 
+        - !Ref PublicSecurityGroup
+      SubnetId: !Ref PublicSubnet
+      PrivateIpAddress: "14.0.1.69" 
+      Tags:
+        - Key: "Name"  
+          Value: "EC2Publica-PilaNumberFive"   
+  
+  PrivateSubnet:
+    Type: "AWS:EC2::Subnet"
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: "us-east-1a"
+      CidrBlock: "14.0.2.0/24"
+      Tags: 
+        - Key: "Name"
+          Value: "SubredPrivada-PilaNumberFive"
+
+  EIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: "vpc"
+  
+  NatGateway:
+    Type: "AWS::EC2::NatGateway"
+    Properties:
+      AllocationId: !GetAtt EIP.AllocationId
+      SubnetId: !Ref PrivateSubnet
+      Tags:
+        - Key: "Name"
+          Value: "NATGateway-PilaNumberFive"
+  
+  PrivateRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties: 
+      VpcId: !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: "TablaPrivada-PilaNumberFive"
+  
+  NatGatewayRoute:
+    Type: "AWS::EC2::Route"
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NatGateway
+      RouteTable: !Ref PrivateRouteTable
+
+  PrivateRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet
+  
+  PrivateSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Grupo de seguridad para permitir acceso SSH solo desde la subred publica"
+      GroupName: "SG-Privado-PilaNumberFive"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref PublicSecurityGroup
+  
+  PrivateEC2Instance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      ImageId: !Ref ImageId
+      KeyName: "vockey"
+      PrivateIpAddress: "14.0.2.22"
+      SecurityGroupIds:
+        - !Ref PrivateSecurityGroup
+      SubnetId: !Ref PrivateSubnet
+      Tags:
+        - Key: "Name"
+          Value: "EC2Privada-PilaNumberFive"
+
+
+
+
+
