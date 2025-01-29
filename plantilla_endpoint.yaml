@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template to create a VPC with public and private subnets, EC2 instances, and necessary configurations.
+
+Parameters:
+  AMIId:
+    Type: String
+    Description: ID of the AMI to use for the EC2 instances
+    AllowedValues:
+      - ami-0c02fb55956c7d316
+      - ami-0d8f6eb4f641ef691 
+      - ami-0a91cd140a1fc148a
+    Default: ami-0c02fb55956c7d316
+
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '13.0.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: EndpointVPC
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: EndpointIGW
+
+  AttachGateway:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '13.0.1.0/24'
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: SubredPublicaEndpoint
+
+  PrivateSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '13.0.2.0/24'
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: SubredPrivadaEndpoint
+
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: TablaPublicaEndpoint
+
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: TablaPrivadaEndpoint
+  
+  PrivateRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  PublicSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Allow SSH from anywhere
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: GSPublicoEndpoint
+
+  PrivateSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Allow SSH from public instance
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref PublicSecurityGroup
+      Tags:
+        - Key: Name
+          Value: GSPrivadoEndpoint
+
+  PublicInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t2.micro
+      SecurityGroupIds:
+        - !Ref PublicSecurityGroup
+      SubnetId: !Ref PublicSubnet
+      ImageId: !Ref AMIId
+      KeyName: 'vockey'
+      Tags:
+        - Key: Name
+          Value: InstanciaPublicaEndpoint
+
+  PrivateInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t2.micro
+      SecurityGroupIds:
+        - !Ref PrivateSecurityGroup
+      SubnetId: !Ref PrivateSubnet
+      ImageId: !Ref AMIId
+      KeyName: 'vockey'
+      Tags:
+        - Key: Name
+          Value: InstanciaPrivadaEndpoint
+
+  S3Endpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcId: !Ref VPC
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+
+  DynamoDBEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.dynamodb
+      VpcId: !Ref VPC
+      RouteTableIds:
+        - !Ref PrivateRouteTable
