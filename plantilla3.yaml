@@ -1,0 +1,185 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Plantilla para crear un Elastic Load Balancer y un AutoScaling Group
+
+Parameters:
+  NombreAutoScalingGroup:
+    Type: String
+    Default: !Join ["-", [vivalalandingzone, Jaime]]
+  
+  NombreElasticLoadBalancer:
+    Type: String
+    Default: !Join ["-", [vivalalandingzone, Jaime]]
+
+  ELBPublico:
+    Description: Variable que determina si el ELB se hace publico o no
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+  
+  AMIId:
+    Description: Variable que determina el ID de la AMI de las instancias del AutoScaling Group
+    Type: String
+    Default: ami-04b4f1a9cf54c11d0
+    AllowedValues:
+      - ami-04b4f1a9cf54c11d0
+      - ami-0e1bed4f06a3b463d
+      - ami-05b10e08d247fb927
+      - ami-02a53b0d62d37a757
+  
+  TipoInstancia:
+    Description: Variable que determina el tipo de instancia de las instancias lanzadas desde el AutoScaling Group
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t3.small
+
+Condition:
+  HacerPublicoELB: !Equals [ !Ref ELBPublico, "true"]  
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 12.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true 
+      Tags:
+        - Key: Name
+          Value: VPCP-lantilla3
+  
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: IGW-Plantilla3
+
+  AdjuntarInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  SubredPublica1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 12.0.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true 
+      Tags:
+        - Key: Name
+          Value: SubredPublica1-Plantilla3
+  
+  SubredPublica2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 12.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true 
+      Tags:
+        - Key: Name
+          Value: SubredPublica2-Plantilla3
+
+  SubredPrivada1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 12.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicOnLaunch: false 
+      Tags:
+        - Key: Name
+          Value: SubredPrivada1-Plantilla3
+  
+  SubredPrivada2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 12.0.3.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicOnLaunch: false 
+      Tags:
+        - Key: Name
+          Value: SubredPrivada1-Plantilla3
+  
+  TablaEnrutamiento:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: TablaRuta-Plantilla3
+
+  TablaPublica:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref TablaEnrutamiento
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  AsociacionTablaRutaSubredPublica1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref RouteTable
+
+  AsociacionTablaRutaSubredPublica2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref RouteTable
+  
+  GrupoSeguridadLoadBalancer:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permitir acceso HTTP desde el exterior
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+  
+  GrupoSeguridadAutoScalingGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permitir acceso HTTP desde el Elastic Load Balancer
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref GrupoSeguridadLoadBalancer
+  
+  ElasticLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: ELB-Plantilla3
+      Scheme: !If 
+        - HacerPublicoELB
+        - "internet-facing"
+        - "internal"
+      SecurityGroups: 
+        - !Ref GrupoSeguridadLoadBalancer
+      Subnets: !If
+        - HacerPublicoELB
+        -
+          - !Ref SubredPublica1
+          - !Ref SubredPublica2
+        -
+          - !Ref SubredPrivada1
+          - !Ref SubredPrivada2
+  
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: TG-Plantilla3
+      Port: 80
+      Protocol: HTTP
+      
