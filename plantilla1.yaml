@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Plantilla con uso de Rules y Conditions para creacion de VPC, subred publica y EC2
+
+Parameters:
+  InstanceType:
+    Description: Tipo de la instancia EC2
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t3.medium
+  
+  AMIId:
+    Description: AMI para la instancia EC2
+    Type: String
+    Default: ami-053a45fff0a704a47 # Amazon Linux 2 AMI
+    AllowedValues:
+      - ami-053a45fff0a704a47
+      - ami-04b4f1a9cf54c11d0
+      - ami-0e1bed4f06a3b463d
+
+  CrearInstancia: 
+    Description: Variable para determinar si se crea o no la instancia
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+
+Conditions:
+  CreoInstancia: !Equals [ !Ref CrearInstancia, "true"]
+
+Rules:
+  PermitirTipoInstancia:
+    Assertions:
+      - Assert: !Or
+        - Fn::Equals:
+          - !Ref InstanceType
+          - t2.micro
+        - Fn::Contains:
+          -
+            - t2.micro
+            - t3.micro
+          - !Ref InstanceType
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [JaimeSerrano, VPC]]
+      
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      MapPublicIpOnLaunch: true
+
+  PublicSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permitir acceso SSH, HTTP y HTTPS a la instancia
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  InstanciaEC2:
+    Type: AWS::EC2::Instance
+    Condition: CreoInstancia
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref AMIId
+      KeyName: vockey
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref PublicSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Join
+            - "-"
+            -
+              - !Ref AWS::Region
+              - !GetAtt InstanciaEC2.InstanceId
+              - "JaimeSerranoQuilez"
+        - Key: VPCId
+          Value: !GetAtt VPC.VpcId
+    
+ 

@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Plantilla de CloudFormation con uso de Mapping para creacion de VPC y Condition para saber si se adjunta un Internet Gateway
+
+Parameters:
+  AttachIGW:
+    Description: Variable para determinar si se adjunta un Internet Gateway
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+
+  SeleccionRegion:
+    Description: Variable para seleccionar la region
+    Type: String
+    Default: us-east-1
+    AllowedValues:
+      - us-east-1
+      - us-west-2
+  
+Mappings:
+  MapeoRegionesVPC:
+    us-east-1: 
+      BloqueCIDR: 10.0.0.0/20
+    us-west-2:
+      BloqueCIDR: 172.16.0.0/20
+  
+  MapeoRegionesSubredes:
+    us-east-1:
+      BloqueCIDR: 10.0.0.0/24
+    us-west-2:
+      BloqueCIDR: 172.16.0.0/24
+
+Conditions:
+  AdjuntarIGW: !Equals [ !Ref AttachIGW, "true"]
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap 
+        - MapeoRegionesVPC
+        - !Ref SeleccionRegion
+        - BloqueCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: 
+        - Key: Name
+          Value: !Join ["-", [JSQ, VPCPlantilla2]]
+  
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Condition: AdjuntarIGW
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [JSQ, IGWPlantilla2]]
+
+  AdjuntoInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: AdjuntarIGW
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+
+  SubredPublica:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, Fn::GetAZs: !Ref 'AWS::Region']
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap
+        - MapeoRegionesSubredes
+        - !Ref SeleccionRegion
+        - BloqueCIDR
+      MapPublicIpOnLaunch: !If
+        - AdjuntarIGW
+        - true 
+        - false
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [noname, SubredPublicaPlantilla2]]
+  
+  TablaRuteo: 
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Join ["-", [noname, TablaRutaPublica]]
+  
+  RutaInternet:
+    Type: AWS::EC2::Route
+    Condition: AdjuntarIGW
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+      RouteTableId: !Ref TablaRuteo
+
+  AsociacionTablaSubredPublica:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: AdjuntarIGW
+    Properties:
+      RouteTableId: !Ref TablaRuteo
+      SubnetId: !Ref SubredPublica
+
+
+
+
